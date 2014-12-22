@@ -1,0 +1,19 @@
+open terminal and perform the following commands:
+$ cd ~
+$ git clone https://github.com/Cold-D/linux.git
+$ cd ~/linux/
+$ git checkout ring-buffer
+$ cd devel/ring-buffer/
+$ make
+# sh auto_insmod.sh
+
+now u can check character device in ur system:
+$ lsmod | grep 
+$ ls -l /dev/ | grep ring
+$ cat /proc/devices | grep ring
+
+buffer in action:
+$ cd examples/
+$ make
+$ ./write ../ring_buffer.c &
+$ ./read 5225 > test.tmp
