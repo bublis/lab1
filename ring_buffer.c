@@ -230,3 +230,4 @@ module_exit(rbuf_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Character device which implements ring buffer.");
 MODULE_AUTHOR("Cold-D @ github.com");
+/*Podpisano*/
