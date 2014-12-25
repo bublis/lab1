@@ -10,36 +10,37 @@
 #include <asm/uaccess.h>
 #include <linux/wait.h>
 
-#define BUF_SIZE 2048
+#define BUF_SIZE 2048 /*задаем размер буфера*/
 
-DECLARE_WAIT_QUEUE_HEAD(wq);
+DECLARE_WAIT_QUEUE_HEAD(wq); /*jxthtlm lkz j;blfybz*/
 
-static unsigned int major;
-static struct cdev *c_dev;
+static unsigned int major;  /*Старший номер для драйвера*/
+static struct cdev *c_dev;	/*структура cdev */
 
-static int rbuf_open(struct inode *, struct file *);
-static int rbuf_write(struct file *, const char __user *, size_t, loff_t *);
-static int rbuf_read(struct file *, char __user *, size_t, loff_t *);
-static int rbuf_release(struct inode *, struct file *);
+static int rbuf_open(struct inode *, struct file *); /*открытие буфера*/
+static int rbuf_write(struct file *, const char __user *, size_t, loff_t *); /*запись в буффер*/
+static int rbuf_read(struct file *, char __user *, size_t, loff_t *);	/*чтение из буфера*/
+static int rbuf_release(struct inode *, struct file *);		/*освобождение буфера*/
 
+/*структура операций с буфером*/
 static const struct file_operations fops = {
 	.open = rbuf_open,
 	.write = rbuf_write,
 	.read = rbuf_read,
 	.release = rbuf_release
 };
-
+/*струтура самого буфера*/
 static struct fbuffer {
 	uid_t owner;
 	char data[BUF_SIZE];
 	int head;
 	int tail;
 	int counter;
-} *table;
+} *table; 
 
-static unsigned int users_count;
+static unsigned int users_count; /*число пользоватлей*/
 
-static int get_usr_ind(void)
+static int get_usr_ind(void) /*вот это не очень понятно что*/
 {
 	int i;
 	uid_t current_user = get_current_user()->uid.val;
@@ -52,48 +53,48 @@ static int get_usr_ind(void)
 	return -1;
 }
 
-static bool write_cond(int i)
+static bool write_cond(int i) /*проверям есть ли место в буфере для записи или нет*/
 {
 	if (table[i].counter < BUF_SIZE)
 		return true;
 	return false;
 }
 
-static bool read_cond(int i)
+static bool read_cond(int i) /*проверям пустой ли буфер или нет*/
 {
 	if (table[i].counter > 0)
 		return true;
 	return false;
 }
 
-static int rbuf_open(struct inode *inode, struct file *filp)
+static int rbuf_open(struct inode *inode, struct file *filp) /*открытие буфера*/
 {
 	uid_t current_user = get_current_user()->uid.val;
 
 	pr_warn("Device opened by process with PID: %d PPID: %d",
 		current->pid, current->real_parent->pid);
 	pr_warn("UID: %d", current_user);
-	if (!table) {
+	if (!table) { /*если таблицы нет то создаем*/
 		int i;
 
 		pr_warn("Creating initial table...");
-		table = kzalloc(sizeof(*table), GFP_KERNEL);
-		table->owner = current_user;
+		table = kzalloc(sizeof(*table), GFP_KERNEL); /*выделяем память и обнуляем ее для таблицы буфера*/
+		table->owner = current_user; /*владелец юзер*/
 		table->head = 0;
 		table->tail = 0;
 		table->counter = 0;
-		for (i = 0; i < BUF_SIZE; i++)
+		for (i = 0; i < BUF_SIZE; i++) /*вот тут непонятно*/
 			table->data[i] = 0;
 		users_count++;
 		pr_warn("Table creation complete.");
 	} else {
 		if (get_usr_ind() == -1) {
-			int i;
-			struct fbuffer *temp;
+			int i;	
+			struct fbuffer *temp;				/*создаем новый буфер для другого юзера*/
 
 			pr_warn("Creating buffer for new user...");
 			temp = table;
-			table = krealloc(temp, sizeof(struct fbuffer) *
+			table = krealloc(temp, sizeof(struct fbuffer) * /*довыделяем память*/
 					 (users_count + 1), GFP_KERNEL);
 			temp = NULL;
 			table[users_count].owner = current_user;
@@ -109,20 +110,20 @@ static int rbuf_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int rbuf_write(struct file *filp, const char __user *usr_buf,
+static int rbuf_write(struct file *filp, const char __user *usr_buf, /*запись в буфер*/
 		      size_t count, loff_t *f_pos)
 {
-	int b_write = 0;
+	int b_write = 0; /*сколько записано в буфер*/
 	char local_buf;
 	int i = get_usr_ind();
 
 	pr_alert("User %d request write %d bytes.",
 		 table[i].owner, count);
-	while (b_write < count) {
-		if (!write_cond(i))
-			wait_event_interruptible(wq, write_cond(i));
-		while (write_cond(i) && b_write < count) {
-			unsigned long copy_retval;
+	while (b_write < count) {	/*если записано меньшее чем тело буфера*/
+		if (!write_cond(i))	/*если не в состоянии записи то */
+			wait_event_interruptible(wq, write_cond(i)); /*прерываем и заносим в очередь*/
+		while (write_cond(i) && b_write < count) { /*если очередь и записанное меньше тела то */
+			unsigned long copy_retval;		/*делаем что-то непонятное*/
 
 			copy_retval = copy_from_user(&local_buf,
 						     usr_buf + b_write, 1);
@@ -130,19 +131,19 @@ static int rbuf_write(struct file *filp, const char __user *usr_buf,
 				pr_err("Error: copy_from_user() function.");
 				return -1;
 			}
-			table[i].data[table[i].head] = local_buf;
+			table[i].data[table[i].head] = local_buf; /*заносим все данные в таблицу*/
 			table[i].head++;
 			table[i].counter++;
 			if (table[i].head >= BUF_SIZE)
 				table[i].head = 0;
 			b_write++;
-			wake_up(&wq);
+			wake_up(&wq); /*будим устройство*/
 		}
 	}
 	return b_write;
 }
 
-static int rbuf_read(struct file *filp, char __user *usr_buf,
+static int rbuf_read(struct file *filp, char __user *usr_buf, /*тут обратное записи*/
 		     size_t count, loff_t *f_pos)
 {
 	int b_read = 0;
@@ -176,7 +177,7 @@ static int rbuf_read(struct file *filp, char __user *usr_buf,
 	return b_read;
 }
 
-static int rbuf_release(struct inode *inode, struct file *filp)
+static int rbuf_release(struct inode *inode, struct file *filp) /*освобождение буфера*/
 {
 	pr_alert("Device released by process with PID: %d PPID: %d",
 		 current->pid, current->real_parent->pid);
@@ -184,36 +185,36 @@ static int rbuf_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int __init rbuf_init(void)
+static int __init rbuf_init(void)/*регистрация модуля*/
 {
 	int ret;
 	dev_t dev_number;
 
-	c_dev = cdev_alloc();
-	c_dev->owner = THIS_MODULE;
-	ret = alloc_chrdev_region(&dev_number, 0, 1, "ring_buffer");
+	c_dev = cdev_alloc();/*выделяем память под cdev*/
+	c_dev->owner = THIS_MODULE; /*регистрируем cdev юзеру этот модуль*/
+	ret = alloc_chrdev_region(&dev_number, 0, 1, "ring_buffer"); /*динамическое выделение номеров*/
 	if (ret < 0) {
 		pr_err("Char device region allocation failed.");
 		return ret;
 	}
 	major = MAJOR(dev_number);
-	ret = cdev_add(c_dev, dev_number, 1);
+	ret = cdev_add(c_dev, dev_number, 1); /*добавление  cdev*/
 	if (ret < 0) {
 		unregister_chrdev_region(MKDEV(major, 0), 1);
 		pr_err("Major number allocation failed.");
 		return ret;
 	}
-	cdev_init(c_dev, &fops);
+	cdev_init(c_dev, &fops);/*регистрация cdev*/
 	pr_warn("---======= ring_buffer module installed =======---");
 	pr_warn("Major = %d\tMinor = %d", MAJOR(dev_number), MINOR(dev_number));
 	return 0;
 }
 
-static void __exit rbuf_exit(void)
+static void __exit rbuf_exit(void) /*выгрузка модуля*/
 {
-	kfree(table);
-	cdev_del(c_dev);
-	unregister_chrdev_region(MKDEV(major, 0), 1);
+	kfree(table); /*освобождение памяти в таблице*/
+	cdev_del(c_dev); /*удаление cdev*/
+	unregister_chrdev_region(MKDEV(major, 0), 1);/*хз*/
 	pr_warn("---======= ring_buffer module removed =======---");
 }
 
