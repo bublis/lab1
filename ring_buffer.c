@@ -10,7 +10,7 @@
 #include <asm/uaccess.h>
 #include <linux/wait.h>
 
-#define BUF_SIZE 2048 /* задаем размер буфера */
+#define BUF_SIZE 4096 /* задаем размер буфера */
 
 DECLARE_WAIT_QUEUE_HEAD(wq); /* очередь для ожидания */
 
@@ -38,8 +38,7 @@ static struct fbuffer {
 	int head;
 	int tail;
 	int counter;
-} *table; 
-
+} *table;
 static unsigned int users_count; /* текущее число пользоватлей */
 
 static int get_usr_ind(void) /* получение индекса текущего пользователя в таблице буферов */
@@ -94,9 +93,8 @@ static int rbuf_open(struct inode *inode, struct file *filp) /* открытие
 		pr_warn("Table creation complete.");
 	} else {
 		if (get_usr_ind() == -1) {
-			int i;	
+			int i;
 			struct fbuffer *temp;	/* создаем новый буфер для другого юзера */
-
 			pr_warn("Creating buffer for new user...");
 			temp = table;
 			table = krealloc(temp, sizeof(struct fbuffer) * /* довыделяем память */
